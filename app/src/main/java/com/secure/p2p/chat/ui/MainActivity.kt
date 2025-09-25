@@ -3,140 +3,124 @@ package com.secure.p2p.chat.ui
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
+import com.secure.p2p.chat.ui.components.*
 import com.secure.p2p.chat.ui.theme.SecureP2PTheme
+import com.secure.p2p.chat.ui.viewmodels.ChatViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             SecureP2PTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    ChatApp()
-                }
+                SecureP2PApp()
             }
         }
     }
 }
 
 @Composable
-fun ChatApp() {
+fun SecureP2PApp() {
     var currentScreen by remember { mutableStateOf<Screen>(Screen.ChatList) }
+    var chatInviteData by remember { mutableStateOf<String?>(null) }
+    
+    val viewModel = ChatViewModel()
     
     when (currentScreen) {
         Screen.ChatList -> ChatListScreen(
             onCreateChat = { currentScreen = Screen.CreateChat },
             onJoinChat = { currentScreen = Screen.JoinChat }
         )
+        
         Screen.CreateChat -> CreateChatScreen(
+            viewModel = viewModel,
+            onBack = { currentScreen = Screen.ChatList },
+            onChatCreated = { qrData ->
+                chatInviteData = qrData
+                currentScreen = Screen.QrCodeDisplay
+            }
+        )
+        
+        Screen.JoinChat -> QrCodeScannerScreen(
+            onQrCodeScanned = { qrData ->
+                chatInviteData = qrData
+                currentScreen = Screen.Chat
+                viewModel.joinChat(qrData, "User${System.currentTimeMillis() % 1000}")
+            },
             onBack = { currentScreen = Screen.ChatList }
         )
-        Screen.JoinChat -> JoinChatScreen(
+        
+        Screen.QrCodeDisplay -> {
+            chatInviteData?.let { qrData ->
+                QrCodeDisplayScreen(
+                    qrData = qrData,
+                    onBack = { currentScreen = Screen.ChatList },
+                    onChatJoined = {
+                        currentScreen = Screen.Chat
+                        viewModel.createNewChat("Creator")
+                    }
+                )
+            }
+        }
+        
+        Screen.Chat -> ChatScreen(
+            viewModel = viewModel,
             onBack = { currentScreen = Screen.ChatList }
         )
     }
 }
 
 @Composable
-fun ChatListScreen(
-    onCreateChat: () -> Unit,
-    onJoinChat: () -> Unit
+fun CreateChatScreen(
+    viewModel: ChatViewModel,
+    onBack: () -> Unit,
+    onChatCreated: (String) -> Unit
 ) {
+    var userName by remember { mutableStateOf("") }
+    
+    // Упрощенный экран создания чата
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = "Secure P2P Chat",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 32.dp)
-        )
-        
-        Button(
-            onClick = onCreateChat,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp)
-        ) {
-            Text("Create New Secure Chat")
-        }
-        
-        Button(
-            onClick = onJoinChat,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp)
-        ) {
-            Text("Join Existing Chat")
-        }
-        
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        // Информация о безопасности
-        SecurityInfoCard()
-    }
-}
-
-@Composable
-fun SecurityInfoCard() {
-    Card(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                text = "🔒 End-to-End Encryption",
-                style = MaterialTheme.typography.titleSmall
-            )
-            Text(
-                text = "• Messages encrypted with AES-256\n• No server storage\n• Direct P2P connections",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-        }
-    }
-}
-
-@Composable
-fun CreateChatScreen(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
+        modifier = androidx.compose.ui.Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
         Text(
             text = "Create Secure Chat",
-            style = MaterialTheme.typography.headlineSmall
+            style = androidx.compose.material3.MaterialTheme.typography.headlineSmall
         )
-        // Здесь будет форма создания чата
-    }
-}
-
-@Composable
-fun JoinChatScreen(onBack: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "Join Chat with QR Code",
-            style = MaterialTheme.typography.headlineSmall
+        
+        Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+        
+        androidx.compose.material3.OutlinedTextField(
+            value = userName,
+            onValueChange = { userName = it },
+            label = { Text("Your Name") },
+            modifier = androidx.compose.ui.Modifier.fillMaxWidth()
         )
-        // Здесь будет сканер QR-кода
+        
+        Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+        
+        androidx.compose.material3.Button(
+            onClick = {
+                if (userName.isNotBlank()) {
+                    viewModel.createNewChat(userName)
+                    onChatCreated("test-qr-data-${System.currentTimeMillis()}")
+                }
+            },
+            modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+        ) {
+            Text("Create Chat & Generate QR Code")
+        }
+        
+        Spacer(modifier = androidx.compose.ui.Modifier.height(8.dp))
+        
+        androidx.compose.material3.TextButton(
+            onClick = onBack,
+            modifier = androidx.compose.ui.Modifier.fillMaxWidth()
+        ) {
+            Text("Cancel")
+        }
     }
 }
 
@@ -144,15 +128,14 @@ sealed class Screen {
     object ChatList : Screen()
     object CreateChat : Screen()
     object JoinChat : Screen()
+    object QrCodeDisplay : Screen()
+    object Chat : Screen()
 }
 
 @Preview(showBackground = true)
 @Composable
-fun PreviewChatList() {
+fun PreviewSecureP2PApp() {
     SecureP2PTheme {
-        ChatListScreen(
-            onCreateChat = {},
-            onJoinChat = {}
-        )
+        SecureP2PApp()
     }
 }
