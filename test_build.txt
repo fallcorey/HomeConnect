@@ -1,0 +1,1 @@
+Test build for simplified project structure
