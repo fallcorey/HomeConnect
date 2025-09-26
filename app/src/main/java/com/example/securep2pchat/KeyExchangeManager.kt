@@ -2,7 +2,6 @@ package com.example.securep2pchat
 
 import android.util.Base64
 import java.security.KeyPairGenerator
-import java.security.PrivateKey
 import java.security.PublicKey
 import javax.crypto.Cipher
 
@@ -21,14 +20,18 @@ class KeyExchangeManager {
     }
     
     fun setPeerPublicKey(publicKeyBase64: String) {
-        val keyBytes = Base64.decode(publicKeyBase64, Base64.DEFAULT)
-        val keyFactory = java.security.KeyFactory.getInstance("RSA")
-        val keySpec = java.security.spec.X509EncodedKeySpec(keyBytes)
-        peerPublicKey = keyFactory.generatePublic(keySpec)
+        try {
+            val keyBytes = Base64.decode(publicKeyBase64, Base64.DEFAULT)
+            val keyFactory = java.security.KeyFactory.getInstance("RSA")
+            val keySpec = java.security.spec.X509EncodedKeySpec(keyBytes)
+            peerPublicKey = keyFactory.generatePublic(keySpec)
+        } catch (e: Exception) {
+            throw RuntimeException("Failed to set peer public key: ${e.message}")
+        }
     }
     
     fun generateSessionKey(): String {
-        sessionKey = CryptoManager().generateSessionKey()
+        sessionKey = CryptoManager().generateAESKey()
         return sessionKey!!
     }
     
@@ -53,20 +56,6 @@ class KeyExchangeManager {
     
     fun getSessionKey(): String {
         return sessionKey ?: throw IllegalStateException("Session key not established")
-    }
-    
-    fun performKeyExchange(peerKeyData: KeyExchangeData): KeyExchangeData {
-        setPeerPublicKey(peerKeyData.publicKey)
-        
-        return if (peerKeyData.encryptedSessionKey != null) {
-            // We are client, decrypt their session key
-            decryptSessionKey(peerKeyData.encryptedSessionKey)
-            KeyExchangeData(getPublicKey())
-        } else {
-            // We are server, generate and encrypt session key
-            generateSessionKey()
-            KeyExchangeData(getPublicKey(), encryptSessionKey())
-        }
     }
     
     private fun generateKeyPair(): java.security.KeyPair {
